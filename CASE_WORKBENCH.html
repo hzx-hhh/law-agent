@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>案件审核工作台</title>
+<style>body{font-family:system-ui;margin:2rem;max-width:1100px}button{padding:.6rem 1rem;margin:.3rem}table{width:100%;border-collapse:collapse}td,th{border:1px solid #ddd;padding:.6rem;text-align:left}.panel{padding:1rem;border:1px solid #ddd;border-radius:8px;margin:1rem 0}</style>
+<h1>案件审核工作台</h1>
+<div class="panel"><label>API 地址 <input id="api" value="http://localhost:8000"></label> <button onclick="loadCases()">刷新案件</button></div>
+<div class="panel"><table><thead><tr><th>案件</th><th>标题</th><th>创建时间</th><th>操作</th></tr></thead><tbody id="cases"></tbody></table></div>
+<div class="panel" id="detail">选择一个案件查看分析版本和审核记录。</div>
+<script>
+const api=()=>document.getElementById('api').value;
+async function loadCases(){const r=await fetch(api()+'/api/cases');const rows=await r.json();document.getElementById('cases').innerHTML=rows.map(x=>`<tr><td>${x.case_id}</td><td>${x.title}</td><td>${x.created_at}</td><td><button onclick="showCase('${x.case_id}')">查看</button></td></tr>`).join('')}
+async function showCase(id){const r=await fetch(api()+'/api/cases/'+id);const x=await r.json();document.getElementById('detail').innerHTML='<h2>'+x.case_id+'</h2>'+x.analyses.map(a=>`<div><b>${a.analysis_id}</b> ${a.status} <a href="${api()}/api/analyses/${a.analysis_id}/export.docx">导出 DOCX</a><br><button onclick="review('${id}','${a.analysis_id}','APPROVED')">通过</button><button onclick="review('${id}','${a.analysis_id}','CHANGES_REQUESTED')">要求修改</button></div>`).join('<hr>')}
+async function review(caseId,analysisId,decision){await fetch(api()+'/api/cases/'+caseId+'/reviews',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,comment:'工作台审核'})});alert('审核已保存');showCase(caseId)}
+loadCases();
+</script></html>

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 法律文书辅助系统（租赁纠纷专版）</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-screen bg-slate-100 text-slate-800">
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div class="grid min-h-[calc(100vh-3rem)] grid-cols-1 gap-6 lg:grid-cols-2">
+        <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+          <div class="mb-6">
+            <h1 class="text-2xl font-bold tracking-tight text-slate-900">
+              AI 法律文书辅助系统（租赁纠纷专版）
+            </h1>
+            <p class="mt-2 text-sm leading-6 text-slate-500">
+              输入案件事实与当事人诉求，生成可编辑的诉讼方案初稿。
+            </p>
+          </div>
+
+          <form id="analyze-form" class="space-y-5">
+            <div>
+              <label for="caseDescription" class="mb-2 block text-sm font-medium text-slate-700">
+                案件事实
+              </label>
+              <textarea
+                id="caseDescription"
+                rows="12"
+                placeholder="请输入案件事实，例如：承租人提前退租后，房东以墙面污损、家具损坏为由拒绝退还押金……"
+                class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                required
+              ></textarea>
+            </div>
+
+            <div>
+              <label for="claims" class="mb-2 block text-sm font-medium text-slate-700">
+                当事人诉求
+              </label>
+              <input
+                id="claims"
+                type="text"
+                placeholder="例如：返还押金、赔偿损失、确认房东无权全额扣押押金"
+                class="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                required
+              />
+            </div>
+
+            <div class="space-y-3">
+              <button
+                id="submitBtn"
+                type="submit"
+                class="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+              >
+                生成诉讼方案
+              </button>
+              <p id="statusText" class="hidden rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700"></p>
+            </div>
+          </form>
+        </section>
+
+        <section
+          id="workspace"
+          class="hidden rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200"
+        >
+          <div class="mb-6 flex items-center justify-between gap-3">
+            <div>
+              <h2 class="text-xl font-semibold text-slate-900">工作区</h2>
+              <p class="mt-1 text-sm text-slate-500">分析结果会显示在这里，可直接继续编辑。</p>
+            </div>
+          </div>
+
+          <div class="space-y-5">
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h3 class="text-base font-semibold text-slate-900">依据卡片</h3>
+              <p id="analysisMeta" class="mt-1 text-sm text-slate-500">相关法条与类案</p>
+              <div id="lawsList" class="mt-4 space-y-2"></div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h3 class="text-base font-semibold text-slate-900">证据与下一步</h3>
+              <div class="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <h4 class="text-sm font-semibold text-amber-800">待补充材料</h4>
+                  <div id="missingEvidenceList" class="mt-2 space-y-2"></div>
+                </div>
+                <div>
+                  <h4 class="text-sm font-semibold text-blue-800">建议动作</h4>
+                  <div id="nextActionsList" class="mt-2 space-y-2"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h3 class="text-base font-semibold text-slate-900">争点卡片</h3>
+              <p class="mt-1 text-sm text-slate-500">分别查看有利依据与不利依据</p>
+              <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <h4 class="text-sm font-semibold text-emerald-800">有利依据</h4>
+                  <div id="favorableList" class="mt-3 space-y-2"></div>
+                </div>
+                <div class="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                  <h4 class="text-sm font-semibold text-rose-800">不利依据</h4>
+                  <div id="unfavorableList" class="mt-3 space-y-2"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h3 class="text-base font-semibold text-slate-900">方案卡片</h3>
+              <p class="mt-1 text-sm text-slate-500">可直接在下方修改诉讼方案初稿</p>
+              <textarea
+                id="draftText"
+                rows="16"
+                class="mt-4 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm leading-7 text-slate-800 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              ></textarea>
+              <div class="mt-4 flex justify-end">
+                <button
+                  id="exportBtn"
+                  type="button"
+                  class="inline-flex items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white transition hover:bg-blue-500"
+                >
+                  导出文本
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      const API_URL = "/api/analyze";
+
+      const form = document.getElementById("analyze-form");
+      const submitBtn = document.getElementById("submitBtn");
+      const statusText = document.getElementById("statusText");
+      const workspace = document.getElementById("workspace");
+      const lawsList = document.getElementById("lawsList");
+      const favorableList = document.getElementById("favorableList");
+      const unfavorableList = document.getElementById("unfavorableList");
+      const draftText = document.getElementById("draftText");
+      const analysisMeta = document.getElementById("analysisMeta");
+      const missingEvidenceList = document.getElementById("missingEvidenceList");
+      const nextActionsList = document.getElementById("nextActionsList");
+      const exportBtn = document.getElementById("exportBtn");
+      const caseDescriptionInput = document.getElementById("caseDescription");
+      const claimsInput = document.getElementById("claims");
+
+      function setLoading(isLoading) {
+        submitBtn.disabled = isLoading;
+        submitBtn.textContent = isLoading ? "Loading..." : "生成诉讼方案";
+      }
+
+      function showStatus(message, type = "info") {
+        statusText.classList.remove("hidden");
+        statusText.textContent = message;
+
+        const typeClassMap = {
+          info: ["border-amber-200", "bg-amber-50", "text-amber-700"],
+          error: ["border-rose-200", "bg-rose-50", "text-rose-700"],
+          success: ["border-emerald-200", "bg-emerald-50", "text-emerald-700"],
+        };
+
+        statusText.className = "rounded-xl px-4 py-3 text-sm";
+        statusText.classList.add(...(typeClassMap[type] || typeClassMap.info));
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function renderTagList(container, items, emptyText, style = "default") {
+        const safeItems = Array.isArray(items) ? items.filter(Boolean) : [];
+
+        if (!safeItems.length) {
+          container.innerHTML = `<p class="text-sm text-slate-500">${escapeHtml(emptyText)}</p>`;
+          return;
+        }
+
+        const styleMap = {
+          default: "border-slate-200 bg-white text-slate-700",
+          favorable: "border-emerald-200 bg-white text-emerald-900",
+          unfavorable: "border-rose-200 bg-white text-rose-900",
+        };
+
+        const itemClass = styleMap[style] || styleMap.default;
+        container.innerHTML = safeItems
+          .map(
+            (item) =>
+              `<div class="rounded-xl border px-3 py-2 text-sm leading-6 ${itemClass}">${escapeHtml(item)}</div>`
+          )
+          .join("");
+      }
+
+      function parseClaims(value) {
+        return value
+          .split(/[，,；;、\n]/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+
+      function renderResult(data) {
+        const laws = Array.isArray(data.laws) ? data.laws : [];
+        const favorable = Array.isArray(data?.issues?.favorable) ? data.issues.favorable : [];
+        const unfavorable = Array.isArray(data?.issues?.unfavorable)
+          ? data.issues.unfavorable
+          : [];
+
+        renderTagList(lawsList, laws, "暂无法条或类案。", "default");
+        renderTagList(favorableList, favorable, "暂无有利依据。", "favorable");
+        renderTagList(unfavorableList, unfavorable, "暂无不利依据。", "unfavorable");
+        renderTagList(missingEvidenceList, data.missing_evidence, "暂无待补充材料。", "default");
+        renderTagList(nextActionsList, data.next_actions, "暂无建议动作。", "default");
+        const statusLabels = {
+          SUCCESS: "模型分析成功",
+          DEGRADED: "本地降级结果（模型不可用）",
+          NEEDS_MORE_INFO: "案情信息不足，需要补充材料",
+          MODEL_OUTPUT_INVALID: "模型输出未通过校验，已使用安全回退",
+        };
+        analysisMeta.textContent = `${statusLabels[data.status] || "分析完成"} · 风险等级：${data.risk_level || "UNKNOWN"} · 资料库：${data.corpus_version || "unknown"} · 请求：${data.request_id || "unknown"}`;
+        draftText.value = typeof data.draft === "string" ? data.draft : "";
+
+        workspace.classList.remove("hidden");
+      }
+
+      async function submitAnalysis(event) {
+        event.preventDefault();
+
+        const caseDescription = caseDescriptionInput.value.trim();
+        const rawClaims = claimsInput.value.trim();
+        const claims = parseClaims(rawClaims);
+
+        if (!caseDescription || !claims.length) {
+          showStatus("请先填写完整的案件事实和当事人诉求。", "error");
+          return;
+        }
+
+        setLoading(true);
+        showStatus("正在调用后端生成诉讼方案，请稍候。", "info");
+
+        try {
+          const response = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              case_description: caseDescription,
+              claims: claims,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (!response.ok) {
+            const errorMessage =
+              typeof result?.detail === "string"
+                ? result.detail
+                : "后端请求失败，请检查服务是否已正确部署。";
+            throw new Error(errorMessage);
+          }
+
+          renderResult(result);
+          showStatus("诉讼方案生成成功，右侧工作区已更新。", "success");
+        } catch (error) {
+          console.error(error);
+          showStatus(
+            `生成失败：${error.message || "无法连接后端接口，请确认当前环境已正确部署。"} `,
+            "error"
+          );
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function exportDraft() {
+        const content = draftText.value.trim();
+
+        if (!content) {
+          showStatus("当前没有可导出的诉讼方案内容。", "error");
+          return;
+        }
+
+        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const now = new Date();
+        const fileName = `诉讼方案初稿_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+          2,
+          "0"
+        )}-${String(now.getDate()).padStart(2, "0")}.txt`;
+
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        showStatus("文本已导出到浏览器下载目录。", "success");
+      }
+
+      form.addEventListener("submit", submitAnalysis);
+      exportBtn.addEventListener("click", exportDraft);
+    </script>
+  </body>
+</html>

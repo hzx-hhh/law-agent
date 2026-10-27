@@ -1,0 +1,378 @@
+AI 法律案件辅助分析平台
+项目升级与开发记录
+记录时间：2026-10-27
+
+一、项目原始状态
+
+项目最初是一个房屋租赁纠纷法律文书 Agent MVP，技术栈为 FastAPI、原生 HTML/JavaScript、本地 laws_db.json 和 DeepSeek 兼容接口。
+
+初始工作流：
+1. 用户输入案件事实和诉求。
+2. 后端使用关键词匹配检索本地法律资料。
+3. 后端拼接 Prompt 调用大语言模型。
+4. 模型返回 laws、issues、draft 三个字段。
+5. 前端展示法条、争点和可编辑诉讼方案。
+
+初始主要问题：
+- API Key 硬编码在 main.py。
+- CORS 全开放。
+- 没有鉴权、租户、限流、幂等和审计。
+- 检索只是关键词包含匹配，不能称为完整 RAG。
+- 法律资料很少，案例带有虚拟案号。
+- 缺少引用原文、版本、生效日期和证据 ID。
+- 所有模型异常都被当作正常结果回退。
+- 没有自动化测试、评测集、真实 bad case 和监控。
+- 没有案件保存、人工审核和文档导入能力。
+
+二、第一阶段：从 MVP 升级为可审计原型
+
+1. 移除硬编码密钥
+
+- 删除 main.py 中的硬编码 API Key。
+- 改用 LLM_API_KEY 或 DEEPSEEK_API_KEY 环境变量。
+- 增加 .env.example。
+- README 增加密钥轮换和泄露处理说明。
+- 扫描项目确认没有残留硬编码 sk- 密钥。
+
+2. 增强 API 响应协议
+
+新增字段：
+- request_id
+- status
+- risk_level
+- citations
+- missing_evidence
+- next_actions
+- corpus_version
+- model
+- structured_issues
+
+状态包括：
+- SUCCESS：模型分析成功。
+- DEGRADED：模型不可用，使用本地规则回退。
+- NEEDS_MORE_INFO：案情信息不足，要求补充事实。
+- MODEL_OUTPUT_INVALID：模型输出没有通过结构校验。
+
+3. 增加证据引用
+
+法律资料现在返回：
+- evidence_id
+- 法条或案例类型
+- 标题
+- 条文内容或裁判规则摘要
+- retrieval_score
+- corpus_version
+- synthetic 标记
+
+模型只能在检索上下文中归纳，法律引用由系统证据包提供，避免模型凭空生成法条或案号。
+
+4. 增加请求追踪和健康检查
+
+新增：
+- X-Request-ID 响应头。
+- X-Response-Time-Ms 响应头。
+- GET /health/live。
+- GET /health/ready。
+- 结构化日志。
+
+5. 增强输入和模型输出校验
+
+- 限制案件描述长度。
+- 限制诉求数量和单条诉求长度。
+- 校验模型 JSON 是否合法。
+- 校验 issues 和 draft 字段是否存在。
+- 非法 JSON 不再直接返回给前端。
+
+6. 改进本地检索
+
+- 支持中文二元词切分。
+- 返回可解释检索分数。
+- 法条和案例分别排序。
+- 支持无结果时的默认资料回退。
+
+三、第二阶段：测试、评测和故障处理
+
+1. 安装并运行 pytest
+
+早期环境没有 pytest，直接运行 pytest 失败；第一次 pip install 还遇到 Windows 用户目录权限问题。
+
+解决：
+python -m pip install --user pytest
+
+之后开始执行真实自动化测试，而不是只保留测试文件。
+
+2. 自动化测试
+
+tests/test_main.py 覆盖：
+- 健康检查。
+- 请求参数校验。
+- 模型无密钥降级。
+- request_id 透传。
+- 检索解释性。
+- PII 脱敏。
+- JWT Token。
+- 文档上传。
+- Prometheus 指标。
+- 幂等请求。
+- DOCX 导出。
+- 法律资料元数据校验。
+- 混合检索接口。
+- 非法模型输出。
+- 上传文件类型和大小错误。
+- 强制认证。
+- 跨租户越权。
+
+当前最终测试结果：17 passed，1 warning。
+
+3. 离线评测
+
+新增 eval_cases.jsonl 和 run_eval.py。
+
+覆盖：
+- 标准租赁纠纷。
+- 信息不足。
+- 正常损耗。
+- Prompt Injection。
+
+离线评测结果：4/4 passed。
+
+4. PII 脱敏
+
+新增身份证号和手机号正则脱敏。
+
+脱敏位置：
+- LLM Prompt。
+- 文档提取结果。
+- 测试数据回显。
+
+当前限制：银行卡、邮箱、地址、人脸图片还需要扩展识别策略。
+
+四、第三阶段：企业级工程骨架
+
+1. 数据库持久化
+
+使用 SQLAlchemy 增加：
+- cases。
+- analysis_records。
+- review_records。
+
+默认使用 SQLite，生产环境可通过 DATABASE_URL 切换 PostgreSQL。
+
+2. JWT 和租户隔离
+
+新增：
+- POST /api/auth/token。
+- tenant_id。
+- user_id。
+- Bearer Token 解析。
+- 所有案件、分析、审核、导出查询增加 tenant_id 条件。
+
+生产配置：
+- REQUIRE_AUTH=true。
+- ALLOW_DEMO_TOKEN=false。
+
+3. Redis 适配器
+
+新增 redis_backend.py，支持：
+- Redis 幂等缓存。
+- Redis 限流计数。
+- TTL。
+- 未配置 Redis 时的本地内存回退。
+
+4. Alembic 数据迁移
+
+新增：
+- alembic.ini。
+- migrations/env.py。
+- migrations/versions/0001_initial.py。
+
+运行：
+alembic upgrade head
+
+5. 文档上传和 OCR
+
+新增 POST /api/documents/upload，支持：
+- TXT。
+- DOCX。
+- PDF 文本层解析。
+- PNG/JPG 图片 OCR。
+
+依赖：
+- python-multipart。
+- pypdf。
+- Pillow。
+- pytesseract。
+
+OCR 不可用时返回 PENDING，不伪造提取结果。
+
+6. OIDC
+
+新增 oidc.py，支持通过 OIDC_ISSUER、OIDC_AUDIENCE 和 JWKS 验证 RS256 Token。
+
+未配置企业 IdP 时保留本地 HS256 演示 Token。
+
+7. Prometheus 和 Grafana
+
+新增：
+- /metrics。
+- prometheus.yml。
+- grafana-dashboard.json。
+- grafana-dashboard-provider.yml。
+- grafana-datasource.yml。
+
+监控请求总量、请求状态、P95 延迟和错误数量。
+
+8. Docker 和 CI
+
+新增：
+- Dockerfile。
+- docker-compose.yml。
+- .dockerignore。
+- .github/workflows/ci.yml。
+
+Docker Compose 包含：
+- API。
+- PostgreSQL + pgvector。
+- Redis。
+- Prometheus。
+- Grafana。
+
+CI 执行 pytest 和离线评测。
+
+9. 文书导出和审核工作台
+
+新增：
+- TXT 导出。
+- DOCX 导出。
+- CASE_WORKBENCH.html。
+- 案件列表。
+- 分析版本。
+- 审核通过。
+- 要求修改。
+
+五、第四阶段：收敛主线和提升可信度
+
+1. 真正接入 BM25
+
+之前的检索只是关键词重叠。之后接入 rank_bm25.BM25Okapi，并保留：
+- 中文二元词切分。
+- embedding 余弦相似度。
+- 标题加权。
+- rerank 综合分数。
+
+新增 retrieval.py 和 BM25 回归测试。
+
+2. 修复真实 BM25 引入后的分数边界 Bug
+
+失败现象：
+启用 rank_bm25 后，重排分数超过 1，Citation 的 Pydantic ge=0、le=1 校验失败，信息不足请求返回 500。
+
+根因：
+算法分数没有统一归一化，调用层假设所有分数已经在 0 到 1 之间。
+
+解决：
+所有 retrieval_score 统一 bounded 到 [0,1]。
+
+验证：
+所有测试和离线评测重新通过。
+
+3. 收紧认证
+
+新增 REQUIRE_AUTH 和 ALLOW_DEMO_TOKEN 配置。
+
+没有认证时可以在本地开发运行；生产配置要求 Bearer Token，并关闭演示 Token。
+
+4. 跨租户越权测试
+
+测试场景：
+租户 A 创建分析，租户 B 使用同一个 analysis_id 导出。
+
+预期：
+返回 404，不暴露资源存在性。
+
+结果：
+通过。
+
+5. 法律资料来源和版本
+
+laws_db.json 增加：
+- source_url。
+- effective_from。
+- jurisdiction。
+- verified_at。
+- version。
+
+legal_corpus_validate.py 校验法律资料完整性。
+
+当前结果：CORPUS_VALID。
+
+案例仍然是 synthetic=true 的合成演示数据，不能作为真实裁判文书。
+
+六、Bad Case 与失败案例
+
+完整复盘见 BAD_CASES.md，索引见 failure_cases.jsonl。
+
+主要案例：
+1. pytest 未安装。
+2. pip 用户目录权限错误。
+3. 测试预期和状态机不一致。
+4. python-multipart 缺失。
+5. 幂等缓存遗漏短案情分支。
+6. 离线评测精确字符串匹配误报。
+7. 模型超时、余额不足、API Key 缺失。
+8. 模型非法 JSON 或缺少字段。
+9. Prompt Injection。
+10. PII 泄露。
+11. 跨租户越权。
+12. 恶意文件和超大文件。
+13. 法律资料缺少来源和版本。
+14. Redis、PostgreSQL、OCR 不可用。
+15. BM25 分数超过 Schema 上限。
+
+统一复盘方法：
+现象 -> 根因 -> 修复 -> 回归验证 -> 生产限制。
+
+七、当前项目真实边界
+
+已经验证：
+- FastAPI API。
+- SQLite 持久化。
+- 结构化响应。
+- 本地降级。
+- 真实 BM25。
+- PII 脱敏。
+- 基础租户过滤。
+- DOCX 导出。
+- 测试、离线评测和 bad case。
+
+已经提供接口但需要真实基础设施验证：
+- PostgreSQL + pgvector。
+- Redis 多实例。
+- 企业 OIDC。
+- 真实 Tesseract OCR。
+- embedding 服务。
+- Docker 多服务部署。
+
+仍属于后续生产工作：
+- 真实裁判文书和法律专业人员双人标注。
+- 多实例压测。
+- 病毒扫描和对象存储隔离。
+- 完整 RBAC。
+- 字段级加密、数据保留和删除策略。
+- 完整前端工程化审核工作台。
+
+八、面试推荐项目定位
+
+推荐表述：
+
+我从一个房屋租赁纠纷法律文书 MVP 开始，逐步补充了 BM25 和可选 embedding 检索、证据引用、失败降级、PII 脱敏、租户隔离、人工审核、文档导入、自动化测试、故障注入和可观测性。当前版本是可以运行的工程化原型。对于 PostgreSQL/pgvector、Redis 集群、OIDC 和真实 OCR，我完成了可切换适配器和本地回退，但没有把未在真实基础设施中验证的功能包装成已经生产上线。
+
+重点案例：
+一次接入真实 BM25 后，分数超过下游 Citation Schema 上限，导致信息不足请求 500。我通过 request_id 和测试定位到是分数归一化边界问题，统一把检索分数裁剪到 [0,1]，增加回归测试，最终 17 个测试全部通过。
+
+九、验证记录
+
+pytest：17 passed，1 warning。
+run_eval.py：4/4 passed。
+legal_corpus_validate.py：CORPUS_VALID。
+硬编码密钥扫描：NO_HARDCODED_KEY_FOUND。

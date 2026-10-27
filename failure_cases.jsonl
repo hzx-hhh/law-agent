@@ -1,0 +1,12 @@
+{"case_id":"F001","category":"dependency","trigger":"pytest 未安装","expected_status":"environment_fixed","regression":"pytest -q tests"}
+{"case_id":"F002","category":"state_machine","trigger":"案情长度小于40字","expected_status":"NEEDS_MORE_INFO","regression":"test_validation_rejects_short_input"}
+{"case_id":"F003","category":"dependency","trigger":"缺少 python-multipart","expected_status":"dependency_declared","regression":"test_token_upload_and_metrics"}
+{"case_id":"F004","category":"idempotency","trigger":"短案情提前返回","expected_status":"same_response","regression":"test_idempotency_returns_same_response"}
+{"case_id":"F005","category":"llm","trigger":"LLM_API_KEY 缺失或超时","expected_status":"DEGRADED","regression":"test_degraded_mode_without_api_key"}
+{"case_id":"F006","category":"llm_schema","trigger":"非法 JSON/缺少 issues","expected_status":"MODEL_OUTPUT_INVALID","regression":"call_llm_analysis schema validation"}
+{"case_id":"F007","category":"security","trigger":"Prompt Injection","expected_status":"no_secret_leak","regression":"安全_001"}
+{"case_id":"F008","category":"privacy","trigger":"身份证和手机号进入 Prompt","expected_status":"redacted","regression":"test_pii_is_redacted_before_model_context"}
+{"case_id":"F009","category":"tenant","trigger":"租户 B 访问租户 A analysis_id","expected_status":"404","regression":"tenant filter on AnalysisRecord"}
+{"case_id":"F010","category":"upload","trigger":"未知 MIME 或超大文件","expected_status":"415_or_413","regression":"upload validation"}
+{"case_id":"F011","category":"corpus","trigger":"法律资料缺少 source_url/effective_from","expected_status":"corpus_invalid","regression":"legal_corpus_validate.py"}
+{"case_id":"F012","category":"infrastructure","trigger":"Redis/PostgreSQL/OCR 不可用","expected_status":"explicit_fallback_or_pending","regression":"health/readiness and upload tests"}
